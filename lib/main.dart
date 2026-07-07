@@ -1,12 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/menu_screen.dart';
+import 'screens/onboarding_screen.dart';
 
-void main() {
-  runApp(const TripleSevenApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  final hasPlayedBefore = prefs.getBool('hasPlayedBefore') ?? false;
+  final savedName = prefs.getString('playerName') ?? '';
+  runApp(TripleSevenApp(hasPlayedBefore: hasPlayedBefore, savedName: savedName));
 }
 
 class TripleSevenApp extends StatelessWidget {
-  const TripleSevenApp({super.key});
+  final bool hasPlayedBefore;
+  final String savedName;
+
+  const TripleSevenApp({
+    super.key,
+    required this.hasPlayedBefore,
+    required this.savedName,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +29,9 @@ class TripleSevenApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.black),
         useMaterial3: true,
       ),
-      home: const MainMenuScreen(),
+      home: hasPlayedBefore
+          ? MainMenuScreen(playerName: savedName)
+          : const OnboardingScreen(),
     );
   }
 }

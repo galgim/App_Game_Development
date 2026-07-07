@@ -60,6 +60,41 @@ class NanaDeck {
 }
 
 // ─────────────────────────────────────────
+// AI MEMORY BANK
+// ─────────────────────────────────────────
+class CardSighting {
+  final NanaCard card;
+  final int? ownerIndex; // null = middle pile
+  bool collected = false;
+
+  CardSighting({required this.card, this.ownerIndex});
+}
+
+class AiMemory {
+  final List<CardSighting> _sightings = [];
+
+  void observe(NanaCard card, int? ownerIndex) {
+    if (_sightings.any((s) => s.card == card)) return;
+    _sightings.add(CardSighting(card: card, ownerIndex: ownerIndex));
+  }
+
+  void markCollected(List<NanaCard> cards) {
+    for (final s in _sightings) {
+      if (cards.contains(s.card)) s.collected = true;
+    }
+  }
+
+  void clear() => _sightings.clear();
+
+  // Returns sightings of a value that are still face-down and not yet collected
+  List<CardSighting> knownLocationsOf(int value) {
+    return _sightings
+        .where((s) => s.card.value == value && !s.collected && !s.card.faceUp)
+        .toList();
+  }
+}
+
+// ─────────────────────────────────────────
 // GAME LOGIC HELPER
 // ─────────────────────────────────────────
 class NanaGameLogic {

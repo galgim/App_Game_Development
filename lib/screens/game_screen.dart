@@ -5,8 +5,9 @@ import '../models.dart';
 
 class GameScreen extends StatefulWidget {
   final String playerName;
+  final bool tutorialMode;
 
-  const GameScreen({super.key, this.playerName = 'You'});
+  const GameScreen({super.key, this.playerName = 'You', this.tutorialMode = false});
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -14,6 +15,8 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> {
   late final GameState _gs;
+  bool _showTutorialHint = true;
+  bool _playerTurnComplete = false;
 
   @override
   void initState() {
@@ -21,7 +24,22 @@ class _GameScreenState extends State<GameScreen> {
     _gs = GameState(playerName: widget.playerName)..addListener(_rebuild);
   }
 
-  void _rebuild() => setState(() {});
+  void _rebuild() {
+    if (widget.tutorialMode && !_playerTurnComplete && _gs.currentPlayerIndex != 0) {
+      _playerTurnComplete = true;
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) setState(() => _showTutorialHint = false);
+      });
+    }
+    setState(() {});
+  }
+
+  String get _tutorialMessage {
+    if (_playerTurnComplete) return 'Great! Watch the AI take their turn. Good luck!';
+    if (_gs.bonusTriggered) return '🔥 Match! Find the 3rd card anywhere on the board.';
+    if (_gs.picksThisTurn == 1) return 'Good! Now reveal one more card.';
+    return 'Your turn — reveal 2 cards. Tap Hi or Lo on an opponent, or pick from the middle pile.';
+  }
 
   @override
   void dispose() {
@@ -99,10 +117,25 @@ class _GameScreenState extends State<GameScreen> {
                   right: 6,
                   child: _SettingsButton(onMenu: () => Navigator.pop(context)),
                 ),
+                if (widget.tutorialMode && _showTutorialHint && !_gs.gameOver)
+                  Positioned(
+                    bottom: 12,
+                    left: 12,
+                    right: 12,
+                    child: IgnorePointer(
+                      child: _TutorialHintBanner(message: _tutorialMessage),
+                    ),
+                  ),
                 if (_gs.gameOver)
                   _GameOverOverlay(
                     winner: _gs.winner,
-                    onPlayAgain: _gs.reset,
+                    onPlayAgain: () {
+                      setState(() {
+                        _showTutorialHint = false;
+                        _playerTurnComplete = false;
+                      });
+                      _gs.reset();
+                    },
                     onMenu: () => Navigator.pop(context),
                   ),
               ],
@@ -905,6 +938,32 @@ class _ActionButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────
+// TUTORIAL HINT BANNER
+// ─────────────────────────────────────────
+
+class _TutorialHintBanner extends StatelessWidget {
+  final String message;
+
+  const _TutorialHintBanner({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        message,
+        style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.4),
+        textAlign: TextAlign.center,
       ),
     );
   }

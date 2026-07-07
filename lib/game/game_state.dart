@@ -17,6 +17,9 @@ class GameState extends ChangeNotifier {
   List<({NanaCard card, NanaPlayer? owner, bool fromMiddle})> revealedThisTurn = [];
   Set<NanaCard> revealedCards = {};
 
+  // One memory bank per AI player (index 0 = AI1/player 1, index 1 = AI2/player 2)
+  late List<AiMemory> _aiMemories;
+
   final Random _random = Random();
   bool _disposed = false;
   final String playerName;
@@ -47,6 +50,7 @@ class GameState extends ChangeNotifier {
     currentPlayerIndex = 0;
     gameOver = false;
     winner = '';
+    _aiMemories = [AiMemory(), AiMemory()];
     _resetTurnCounters();
   }
 
@@ -84,6 +88,10 @@ class GameState extends ChangeNotifier {
   void _addRevealed(NanaCard card, NanaPlayer? owner, bool fromMiddle) {
     revealedThisTurn.add((card: card, owner: owner, fromMiddle: fromMiddle));
     revealedCards = {for (final r in revealedThisTurn) r.card};
+    final ownerIndex = owner != null ? players.indexOf(owner) : null;
+    for (int i = 1; i < players.length; i++) {
+      _aiMemories[i - 1].observe(card, ownerIndex);
+    }
   }
 
   void _log(String msg) {
@@ -161,6 +169,9 @@ class GameState extends ChangeNotifier {
         r.owner?.hand.remove(r.card);
       }
     }
+    for (final mem in _aiMemories) {
+      mem.markCollected(setCards);
+    }
     collector.sets.add(setCards);
     revealedThisTurn = [];
     revealedCards = {};
@@ -194,20 +205,52 @@ class GameState extends ChangeNotifier {
 
   // ── AI ──
 
+  AiMemory _memoryFor(int playerIndex) => _aiMemories[playerIndex - 1];
+
+  // Attempts to reveal a card from a memory sighting. Returns true if successful.
+  bool _tryRevealFromSighting(CardSighting sighting, NanaPlayer ai) {
+    final card = sighting.card;
+    if (card.faceUp) return false;
+    if (sighting.ownerIndex == null) {
+      if (!middlePile.contains(card)) return false;
+      card.faceUp = true;
+      _addRevealed(card, null, true);
+      notifyListeners();
+      _afterReveal(ai);
+      return true;
+    } else {
+      final owner = players[sighting.ownerIndex!];
+      if (!owner.hand.contains(card)) return false;
+      card.faceUp = true;
+      _addRevealed(card, owner, false);
+      notifyListeners();
+      _afterReveal(ai);
+      return true;
+    }
+  }
+
   void _aiReveal() {
     if (gameOver || _disposed) return;
     final ai = players[currentPlayerIndex];
+    final memory = _memoryFor(currentPlayerIndex);
     final others = players.where((p) => p != ai && p.hand.isNotEmpty).toList();
 
-    // Bonus turn: try to find the matching 3rd card
+    // ── Bonus turn: find the matching 3rd card ──
     if (bonusTriggered && picksThisTurn == 2 && revealedThisTurn.isNotEmpty) {
       final targetValue = revealedThisTurn[0].card.value;
+
+      // Check memory first — AI goes straight to a card it has seen
+      for (final sighting in memory.knownLocationsOf(targetValue)) {
+        if (_tryRevealFromSighting(sighting, ai)) return;
+      }
+
+      // Fallback: check hi/lo extremes of opponents (original logic)
       for (final target in others) {
         final unrevealed = target.hand.where((c) => !c.faceUp).toList();
         if (unrevealed.isEmpty) continue;
         NanaCard? matchCard;
-        if (unrevealed.last.value == targetValue) matchCard = unrevealed.last;
-        else if (unrevealed.first.value == targetValue) matchCard = unrevealed.first;
+        if (unrevealed.last.value == targetValue) { matchCard = unrevealed.last; }
+        else if (unrevealed.first.value == targetValue) { matchCard = unrevealed.first; }
         if (matchCard != null) {
           matchCard.faceUp = true;
           _addRevealed(matchCard, target, false);
@@ -225,7 +268,7 @@ class GameState extends ChangeNotifier {
         _afterReveal(ai);
         return;
       }
-      final ownMatch = ai.hand.where((c) => c.value == targetValue).toList();
+      final ownMatch = ai.hand.where((c) => c.value == targetValue && !c.faceUp).toList();
       if (ownMatch.isNotEmpty) {
         final card = ownMatch.first;
         card.faceUp = true;
@@ -236,7 +279,37 @@ class GameState extends ChangeNotifier {
       }
     }
 
-    // Normal turn: random choice between middle and opponent high/low
+    // ── Normal turn ──
+
+    // Pick 1: AI knows its own hand — look for a value it holds 2+ of and find the 3rd
+    if (picksThisTurn == 0) {
+      final valueCounts = <int, int>{};
+      for (final c in ai.hand) {
+        valueCounts[c.value] = (valueCounts[c.value] ?? 0) + 1;
+      }
+      // Prioritize values where the AI already has a pair (needs 1 more)
+      for (final entry in valueCounts.entries.where((e) => e.value >= 2)) {
+        for (final sighting in memory.knownLocationsOf(entry.key)) {
+          if (_tryRevealFromSighting(sighting, ai)) return;
+        }
+      }
+      // Also try values where the AI has 1 (look for a pair to set up a match)
+      for (final entry in valueCounts.entries.where((e) => e.value == 1)) {
+        for (final sighting in memory.knownLocationsOf(entry.key)) {
+          if (_tryRevealFromSighting(sighting, ai)) return;
+        }
+      }
+    }
+
+    // Pick 2: AI knows pick 1's value — search memory for a matching card
+    if (picksThisTurn == 1 && revealedThisTurn.isNotEmpty) {
+      final targetValue = revealedThisTurn[0].card.value;
+      for (final sighting in memory.knownLocationsOf(targetValue)) {
+        if (_tryRevealFromSighting(sighting, ai)) return;
+      }
+    }
+
+    // Fallback: original random logic
     final choice = _random.nextInt(3);
     if (choice == 0 && middlePile.isNotEmpty) {
       final available = middlePile.where((c) => !c.faceUp).toList();

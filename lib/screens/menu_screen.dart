@@ -1,15 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'game_screen.dart';
 
 class MainMenuScreen extends StatefulWidget {
-  const MainMenuScreen({super.key});
+  final String playerName;
+
+  const MainMenuScreen({super.key, this.playerName = 'You'});
 
   @override
   State<MainMenuScreen> createState() => _MainMenuScreenState();
 }
 
 class _MainMenuScreenState extends State<MainMenuScreen> {
-  final TextEditingController _nameController = TextEditingController(text: 'You');
+  late final TextEditingController _nameController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.playerName);
+  }
 
   @override
   void dispose() {
@@ -20,6 +29,18 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   String get _playerName {
     final trimmed = _nameController.text.trim();
     return trimmed.isEmpty ? 'You' : trimmed;
+  }
+
+  Future<void> _play() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('playerName', _playerName);
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GameScreen(playerName: _playerName),
+      ),
+    );
   }
 
   @override
@@ -43,7 +64,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              const _CardBackFan(),
+              const CardBackFan(),
               const Spacer(),
               TextField(
                 controller: _nameController,
@@ -54,7 +75,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   labelText: 'Your name',
                   labelStyle: const TextStyle(color: Colors.black45, letterSpacing: 1),
                   counterText: '',
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: const BorderSide(color: Colors.black26, width: 1.5),
@@ -66,26 +88,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              _menuButton(
-                context,
-                label: 'PLAY',
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => GameScreen(playerName: _playerName),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              _menuButton(
-                context,
-                label: 'HOW TO PLAY',
-                filled: false,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const HowToPlayScreen()),
-                ),
-              ),
+              _menuButton(label: 'PLAY', onTap: _play),
               const SizedBox(height: 48),
             ],
           ),
@@ -94,26 +97,25 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     );
   }
 
-  Widget _menuButton(BuildContext context,
-      {required String label, required VoidCallback onTap, bool filled = true}) {
+  Widget _menuButton({required String label, required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
-          color: filled ? Colors.black : Colors.white,
+          color: Colors.black,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: Colors.black, width: 2),
         ),
         child: Center(
           child: Text(
             label,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
               letterSpacing: 2,
-              color: filled ? Colors.white : Colors.black,
+              color: Colors.white,
             ),
           ),
         ),
@@ -122,8 +124,9 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   }
 }
 
-class _CardBackFan extends StatelessWidget {
-  const _CardBackFan();
+// Public so OnboardingScreen and TutorialScreen can reuse it.
+class CardBackFan extends StatelessWidget {
+  const CardBackFan({super.key});
 
   static const double _cardW = 65.0;
   static const double _cardH = 90.0;
@@ -195,143 +198,6 @@ class _CardBackFan extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _DecorativeFan extends StatelessWidget {
-  const _DecorativeFan();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 100,
-      child: Center(
-        child: SizedBox(
-          width: 180,
-          height: 100,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Positioned(
-                left: 8,
-                top: 22,
-                child: Transform.rotate(angle: -0.35, child: _card()),
-              ),
-              Positioned(
-                left: 64,
-                top: 6,
-                child: _card(),
-              ),
-              Positioned(
-                right: 8,
-                top: 22,
-                child: Transform.rotate(angle: 0.35, child: _card()),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _card() => Container(
-        width: 52,
-        height: 72,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: Colors.black, width: 1.5),
-          boxShadow: const [
-            BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(1, 2)),
-          ],
-        ),
-        child: const Center(
-          child: Text(
-            '7',
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
-          ),
-        ),
-      );
-}
-
-class HowToPlayScreen extends StatelessWidget {
-  const HowToPlayScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: const Text('HOW TO PLAY',
-            style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2)),
-        centerTitle: true,
-      ),
-      body: const SingleChildScrollView(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _RuleSection(
-              title: '🎯 GOAL',
-              body:
-                  'Be the first player to collect 3 sets of matching cards. A set is 3 cards with the same number.',
-            ),
-            _RuleSection(
-              title: '🃏 THE DECK',
-              body:
-                  'The deck has cards numbered 1 to 12, with 3 copies of each number — 36 cards total.',
-            ),
-            _RuleSection(
-              title: '🔀 SETUP',
-              body:
-                  'Each player is dealt 9 cards face down. The remaining 9 cards form the middle pile.',
-            ),
-            _RuleSection(
-              title: '▶ YOUR TURN',
-              body:
-                  'On your turn you can either:\n\n• Take the HIGHEST card from another player\n• Take the LOWEST card from another player\n• Pick a random card from the middle pile\n\nThe card is revealed immediately when taken.',
-            ),
-            _RuleSection(
-              title: '✅ SETS',
-              body:
-                  'When you have 3 cards with the same number they automatically form a set and are removed from your hand.',
-            ),
-            _RuleSection(
-              title: '🏆 WINNING',
-              body: 'The first player to collect 3 sets wins the game!',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RuleSection extends StatelessWidget {
-  final String title;
-  final String body;
-
-  const _RuleSection({required this.title, required this.body});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title,
-              style: const TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1)),
-          const SizedBox(height: 8),
-          Text(body,
-              style: const TextStyle(fontSize: 14, height: 1.6, color: Colors.black87)),
-          const Divider(height: 32, color: Colors.black12),
-        ],
       ),
     );
   }
