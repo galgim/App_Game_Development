@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'game_screen.dart';
@@ -201,10 +202,13 @@ class _TrianglePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = size.width * 0.16
       ..strokeJoin = StrokeJoin.round;
+    final side = size.width;
+    final triHeight = side * math.sqrt(3) / 2;
+    final top = (size.height - triHeight) / 2;
     final path = Path()
-      ..moveTo(size.width / 2, 0)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
+      ..moveTo(size.width / 2, top)
+      ..lineTo(size.width, top + triHeight)
+      ..lineTo(0, top + triHeight)
       ..close();
     canvas.drawPath(path, paint);
   }

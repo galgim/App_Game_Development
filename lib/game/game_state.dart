@@ -97,7 +97,7 @@ class GameState extends ChangeNotifier {
   void _log(String msg) {
     if (_disposed) return;
     gameLog = msg;
-    notifyListeners();
+    // gameLog is not displayed in the UI — callers handle notifications
   }
 
   // ── Turn flow ──
@@ -114,18 +114,21 @@ class GameState extends ChangeNotifier {
 
     if (picksThisTurn == 1) {
       _log('${currentPlayer.name} revealed ${values[0]} from $source.');
+      // canReveal is still true (1 < 2); no additional notify needed
     } else if (picksThisTurn == 2) {
       if (values[0] == values[1]) {
         bonusTriggered = true;
         maxPicksThisTurn = 3;
         _log('🔥 MATCH! Both ${values[0]} — find the 3rd!');
+        notifyListeners(); // bonusTriggered + maxPicksThisTurn changed
       } else {
         _log('No match (${values[0]} & ${values[1]}). Flipping back...');
-        Future.delayed(const Duration(milliseconds: 1000), () {
+        notifyListeners(); // picksThisTurn == maxPicksThisTurn → disable buttons
+        Future.delayed(const Duration(milliseconds: 600), () {
           if (_disposed) return;
           _flipRevealedBack();
           notifyListeners();
-          Future.delayed(const Duration(milliseconds: 600), _nextTurn);
+          Future.delayed(const Duration(milliseconds: 350), _nextTurn);
         });
       }
     } else if (picksThisTurn == 3) {
@@ -133,19 +136,20 @@ class GameState extends ChangeNotifier {
         final fromOwnHand = !latest.fromMiddle && latest.owner == currentPlayer;
         final extra = (fromOwnHand && !currentPlayer.isHuman) ? ' Found it in their own hand!' : '';
         _log('🎉 TRIPLE ${values[0]}! Collecting set!$extra');
-        Future.delayed(const Duration(milliseconds: 800), () {
+        Future.delayed(const Duration(milliseconds: 450), () {
           if (_disposed) return;
           _collectSet(currentPlayer);
           notifyListeners();
-          Future.delayed(const Duration(milliseconds: 600), _nextTurn);
+          Future.delayed(const Duration(milliseconds: 350), _nextTurn);
         });
       } else {
         _log('No triple (${values[0]}, ${values[1]}, ${values[2]}). Flipping back...');
-        Future.delayed(const Duration(milliseconds: 1000), () {
+        notifyListeners(); // picksThisTurn == maxPicksThisTurn → disable buttons
+        Future.delayed(const Duration(milliseconds: 600), () {
           if (_disposed) return;
           _flipRevealedBack();
           notifyListeners();
-          Future.delayed(const Duration(milliseconds: 600), _nextTurn);
+          Future.delayed(const Duration(milliseconds: 350), _nextTurn);
         });
       }
     }
@@ -154,7 +158,7 @@ class GameState extends ChangeNotifier {
         !currentPlayer.isHuman &&
         picksThisTurn < maxPicksThisTurn &&
         !(picksThisTurn == 2 && values.length >= 2 && values[0] != values[1])) {
-      Future.delayed(const Duration(milliseconds: 1400), _aiReveal);
+      Future.delayed(const Duration(milliseconds: 700), _aiReveal);
     }
   }
 
@@ -197,7 +201,7 @@ class GameState extends ChangeNotifier {
     notifyListeners();
     if (!players[currentPlayerIndex].isHuman) {
       _log('${players[currentPlayerIndex].name} is thinking...');
-      Future.delayed(const Duration(milliseconds: 1500), _aiReveal);
+      Future.delayed(const Duration(milliseconds: 700), _aiReveal);
     } else {
       _log('Your turn — reveal 2 cards.');
     }

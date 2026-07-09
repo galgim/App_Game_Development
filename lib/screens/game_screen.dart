@@ -241,6 +241,13 @@ class _AIProfileCard extends StatelessWidget {
     final maxDrop = n > 1 ? _fanRadius * (1 - math.cos(_fanAngle / 2)) : 0.0;
     final fanHeight = _fanCardH + _fanLift + maxDrop;
 
+    // Pre-compute trig outside LayoutBuilder — only depends on n, not on width
+    final positions = List.generate(n, (i) {
+      final t = n == 1 ? 0.0 : i / (n - 1) - 0.5;
+      final angle = t * _fanAngle;
+      return (angle: angle, drop: _fanRadius * (1 - math.cos(angle)), dx: _fanRadius * math.sin(angle));
+    });
+
     return SizedBox(
       height: fanHeight,
       child: LayoutBuilder(
@@ -249,16 +256,13 @@ class _AIProfileCard extends StatelessWidget {
           return Stack(
             clipBehavior: Clip.none,
             children: List.generate(n, (i) {
-              final t = n == 1 ? 0.0 : i / (n - 1) - 0.5;
-              final angle = t * _fanAngle;
-              final drop = _fanRadius * (1 - math.cos(angle));
-              final dx = _fanRadius * math.sin(angle);
+              final pos = positions[i];
               final card = hand[i];
               return Positioned(
-                top: _fanLift + drop,
-                left: cx + dx - _fanCardW / 2,
+                top: _fanLift + pos.drop,
+                left: cx + pos.dx - _fanCardW / 2,
                 child: Transform.rotate(
-                  angle: angle,
+                  angle: pos.angle,
                   child: NanaCardWidget(
                     card: card,
                     darkBg: true,
@@ -553,6 +557,21 @@ class _FanHandSectionState extends State<_FanHandSection> {
 
   NanaCard? _pressedCard;
 
+  // Cache fan geometry — recompute only when hand size changes
+  int _cachedN = -1;
+  late List<({double angle, double drop, double dx})> _cachedPositions;
+
+  List<({double angle, double drop, double dx})> _positions(int n) {
+    if (n == _cachedN) return _cachedPositions;
+    _cachedN = n;
+    _cachedPositions = List.generate(n, (i) {
+      final t = n == 1 ? 0.0 : i / (n - 1) - 0.5;
+      final angle = t * _totalAngle;
+      return (angle: angle, drop: _radius * (1 - math.cos(angle)), dx: _radius * math.sin(angle));
+    });
+    return _cachedPositions;
+  }
+
   @override
   Widget build(BuildContext context) {
     final human = widget.human;
@@ -565,6 +584,8 @@ class _FanHandSectionState extends State<_FanHandSection> {
     final unrevealed = human.hand.where((c) => !c.faceUp).toList();
     final lowestCard = unrevealed.isNotEmpty ? unrevealed.first : null;
     final highestCard = unrevealed.length > 1 ? unrevealed.last : null;
+
+    final positions = _positions(n);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
@@ -602,22 +623,19 @@ class _FanHandSectionState extends State<_FanHandSection> {
                   return Stack(
                     clipBehavior: Clip.none,
                     children: List.generate(n, (i) {
-                      final t = n == 1 ? 0.0 : i / (n - 1) - 0.5;
-                      final angle = t * _totalAngle;
-                      final drop = _radius * (1 - math.cos(angle));
-                      final dx = _radius * math.sin(angle);
+                      final pos = positions[i];
                       final card = human.hand[i];
                       final isHighOrLow = card == lowestCard || card == highestCard;
                       final isTappable = canReveal && !card.faceUp && isHighOrLow;
                       final isPressed = _pressedCard == card;
-                      final topOffset = _liftAmount + drop - (isPressed ? _liftAmount : 0);
+                      final topOffset = _liftAmount + pos.drop - (isPressed ? _liftAmount : 0);
                       final isMuted = !card.faceUp && !isHighOrLow;
 
                       return Positioned(
                         top: topOffset,
-                        left: cx + dx - _cardW / 2,
+                        left: cx + pos.dx - _cardW / 2,
                         child: Transform.rotate(
-                          angle: angle,
+                          angle: pos.angle,
                           child: GestureDetector(
                             onTapDown: isTappable
                                 ? (_) => setState(() => _pressedCard = card)
@@ -816,33 +834,13 @@ class NanaCardWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final showValue = card.faceUp || alwaysShowValue;
-    final w = size == _CardSize.large
-        ? 76.0
-        : size == _CardSize.pile
-            ? 64.0
-            : size == _CardSize.medium
-                ? null
-                : size == _CardSize.small
-                    ? 34.0
-                    : 50.0;
-    final h = size == _CardSize.large
-        ? 104.0
-        : size == _CardSize.pile
-            ? 88.0
-            : size == _CardSize.medium
-                ? 64.0
-                : size == _CardSize.small
-                    ? 46.0
-                    : 70.0;
-    final fs = size == _CardSize.large
-        ? 22.0
-        : size == _CardSize.pile
-            ? 20.0
-            : size == _CardSize.medium
-                ? 18.0
-                : size == _CardSize.small
-                    ? 12.0
-                    : 17.0;
+    final (double? w, double h, double fs) = switch (size) {
+      _CardSize.large  => (76.0,  104.0, 22.0),
+      _CardSize.pile   => (64.0,   88.0, 20.0),
+      _CardSize.medium => (null,   64.0, 18.0),
+      _CardSize.small  => (34.0,   46.0, 12.0),
+      _CardSize.mini   => (50.0,   70.0, 17.0),
+    };
 
     return Container(
       width: w,
@@ -874,7 +872,7 @@ class NanaCardWidget extends StatelessWidget {
                     '${card.value}',
                     style: TextStyle(
                       fontSize: card.value >= 10 ? fs * 0.8 : fs,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w900,
                       color: muted ? Colors.white70 : Colors.black,
                     ),
                   ),
@@ -948,10 +946,13 @@ class _TrianglePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = size.width * 0.16
       ..strokeJoin = StrokeJoin.round;
+    final side = size.width;
+    final triHeight = side * math.sqrt(3) / 2;
+    final top = (size.height - triHeight) / 2;
     final path = Path()
-      ..moveTo(size.width / 2, 0)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
+      ..moveTo(size.width / 2, top)
+      ..lineTo(size.width, top + triHeight)
+      ..lineTo(0, top + triHeight)
       ..close();
     canvas.drawPath(path, paint);
   }
